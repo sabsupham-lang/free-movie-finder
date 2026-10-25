@@ -114,3 +114,39 @@ describe("public-domain details", () => {
     expect(queryPublicDomain([], { category: "free", filters: EMPTY_FILTERS, page: 1 })).toMatchObject({ items: [], totalPages: 1 });
   });
 });
+
+describe("Archive library shelves and labels", () => {
+  const lib: PdFilm[] = [
+    film({ id: "ia-a", wikidataId: null, title: "Duck and Cover", shelf: "government", popularity: 9000, rights: { status: "public-domain", jurisdiction: "US", basis: "Made by a US federal agency.", reason: "us-gov" } }),
+    film({ id: "ia-b", wikidataId: null, title: "Design for Dreaming", shelf: "vintage", popularity: 8000, rights: { status: "public-domain", jurisdiction: "US", basis: "Prelinger.", reason: "prelinger" } }),
+    film({ id: "ia-c", wikidataId: null, title: "Big Buck Bunny", shelf: "open", popularity: 7000, rights: { status: "creative-commons", jurisdiction: "US", basis: "CC.", reason: "cc", license: "https://creativecommons.org/licenses/by/3.0/" } }),
+  ];
+  const all = [...films, ...lib];
+
+  it("keeps ads and government footage out of the public-domain shelf", () => {
+    const ids = queryPublicDomain(all, { category: "public-domain", filters: EMPTY_FILTERS, page: 1 }).items.map((m) => m.id);
+    expect(ids).toContain("ia-c");
+    expect(ids).not.toContain("ia-a");
+    expect(ids).not.toContain("ia-b");
+  });
+
+  it("serves the vintage and government shelves", () => {
+    expect(queryPublicDomain(all, { category: "vintage", filters: EMPTY_FILTERS, page: 1 }).items.map((m) => m.id)).toEqual(["ia-b"]);
+    expect(queryPublicDomain(all, { category: "government", filters: EMPTY_FILTERS, page: 1 }).items.map((m) => m.id)).toEqual(["ia-a"]);
+  });
+
+  it("finds Archive films in title search", () => {
+    const f = parseFilters(new URLSearchParams({ q: "bunny" }));
+    expect(queryPublicDomain(all, { category: "search", filters: f, page: 1 }).items.map((m) => m.id)).toEqual(["ia-c"]);
+  });
+
+  it("labels each copy with its actual reason", () => {
+    const cc = pdToDetail(lib[2], "US");
+    expect(cc.freeLabel).toBe("Free · Creative Commons");
+    expect(cc.publicDomainCopy?.heading).toBe("Free: Creative Commons");
+    expect(cc.publicDomainCopy?.rightsNote).toContain("CC.");
+    expect(pdToDetail(lib[0], "US").publicDomainCopy?.heading).toBe("Free: US government film");
+    expect(pdToDetail(films[0], "US").publicDomainCopy?.heading).toBe("Free: public domain in the US");
+    expect(pdOffers(lib[2])[0].note).toBe("Creative Commons, no account needed");
+  });
+});

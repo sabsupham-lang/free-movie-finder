@@ -30,7 +30,7 @@ export function WatchOptions({ movie }: { movie: MovieDetail }) {
     <div className="offers">
       {pd && (
         <div className="offer-group">
-          <h3>Free: public domain in the US</h3>
+          <h3>{pd.heading}</h3>
           <ul className="offer-list">
             {pd.archiveId && (
               <li className="offer">

@@ -4,8 +4,8 @@ import type { MovieDetail, MovieSummary, Page, PublicDomainCopy, WatchOffer } fr
 
 // Shape of data/public-domain.json (written by scripts/refresh-public-domain.mjs).
 export type PdFilm = {
-  id: string;
-  wikidataId: string;
+  id: string; // "pd-Q123" (Wikidata catalog) or "ia-<identifier>" (Archive library)
+  wikidataId: string | null;
   title: string;
   year: number | null;
   releaseDate: string | null;
@@ -26,7 +26,15 @@ export type PdFilm = {
   popularity: number;
   archive: { identifier: string; downloads: number; avgRating: number | null; numReviews: number; alternates: number } | null;
   commonsVideo: { file: string; url: string; mime: string; durationSeconds: number | null } | null;
-  rights: { status: "public-domain"; jurisdiction: string; basis: string };
+  rights: {
+    status: "public-domain" | "creative-commons";
+    jurisdiction: string;
+    basis: string; // plain-language reason shown on the film page
+    reason?: "age" | "us-gov" | "prelinger" | "uploader-pd" | "cc"; // Archive library only
+    license?: string; // Creative Commons license URL
+  };
+  // Archive library only: which shelf the film is browsed under.
+  shelf?: "classic" | "vintage" | "government" | "open";
 };
 
 export type PdCatalog = {
@@ -39,6 +47,26 @@ export type PdCatalog = {
 export const RIGHTS_NOTE =
   "Listed as public domain in the United States on Wikidata. Copyright terms differ by country, so check the rules where you live.";
 
+const COUNTRY_NOTE = " Rules differ by country, so check the rules where you live.";
+
+export function rightsNote(f: PdFilm): string {
+  if (f.wikidataId) return RIGHTS_NOTE;
+  const takedown = " If you hold rights to this film, use the contact on the Terms page and we will remove it.";
+  return f.rights.basis + COUNTRY_NOTE + takedown;
+}
+
+export function freeLabel(f: PdFilm): string {
+  if (f.rights.status === "creative-commons") return "Free · Creative Commons";
+  if (f.rights.reason === "us-gov") return "Free · US government film";
+  return "Free · Public domain";
+}
+
+function freeHeading(f: PdFilm): string {
+  if (f.rights.status === "creative-commons") return "Free: Creative Commons";
+  if (f.rights.reason === "us-gov") return "Free: US government film";
+  return "Free: public domain in the US";
+}
+
 export function pdToSummary(f: PdFilm): MovieSummary {
   return {
     id: f.id,
@@ -47,6 +75,7 @@ export function pdToSummary(f: PdFilm): MovieSummary {
     posterUrl: f.poster?.url ?? null,
     rating: f.rating ? { value: f.rating.value, votes: f.rating.votes, source: f.rating.source } : null,
     publicDomain: true,
+    freeLabel: freeLabel(f),
   };
 }
 
@@ -55,16 +84,16 @@ export function pdCopy(f: PdFilm): PublicDomainCopy {
     archiveId: f.archive?.identifier ?? null,
     archiveDownloads: f.archive?.downloads ?? null,
     commonsVideo: f.commonsVideo ? { url: f.commonsVideo.url, file: f.commonsVideo.file, mime: f.commonsVideo.mime } : null,
-    rightsNote: RIGHTS_NOTE,
+    rightsNote: rightsNote(f),
+    heading: freeHeading(f),
   };
 }
 
 export function pdOffers(f: PdFilm): WatchOffer[] {
   const offers: WatchOffer[] = [];
-  if (f.archive)
-    offers.push({ kind: "free", providerId: "pd:archive", providerName: "Internet Archive", logoUrl: null, note: "Public domain, no account needed" });
-  if (f.commonsVideo)
-    offers.push({ kind: "free", providerId: "pd:commons", providerName: "Wikimedia Commons", logoUrl: null, note: "Public domain, no account needed" });
+  const note = `${f.rights.status === "creative-commons" ? "Creative Commons" : "Public domain"}, no account needed`;
+  if (f.archive) offers.push({ kind: "free", providerId: "pd:archive", providerName: "Internet Archive", logoUrl: null, note });
+  if (f.commonsVideo) offers.push({ kind: "free", providerId: "pd:commons", providerName: "Wikimedia Commons", logoUrl: null, note });
   return offers;
 }
 
@@ -74,7 +103,7 @@ export function pdToDetail(f: PdFilm, region: string): MovieDetail {
     originalTitle: null,
     tagline: null,
     synopsis: f.synopsis ?? f.shortDescription,
-    synopsisSource: f.synopsis ? f.synopsisSource : f.shortDescription ? "Wikidata description" : null,
+    synopsisSource: f.synopsis ? f.synopsisSource : f.shortDescription ? (f.wikidataId ? "Wikidata description" : "Internet Archive") : null,
     releaseDate: f.releaseDate,
     runtimeMinutes: f.runtimeMinutes,
     genres: f.genres,
@@ -93,7 +122,7 @@ export function pdToDetail(f: PdFilm, region: string): MovieDetail {
     },
     publicDomainCopy: pdCopy(f),
     externalIds: { imdb: f.imdbId, tmdb: f.tmdbId, wikidata: f.wikidataId },
-    metadataSource: "Wikidata and Internet Archive",
+    metadataSource: f.wikidataId ? "Wikidata and Internet Archive" : "the Internet Archive (uploader-provided)",
   };
 }
 
@@ -130,15 +159,20 @@ const byTitle: Sorter = (a, b) => a.title.localeCompare(b.title);
 
 // How each category behaves when only the public-domain catalog is
 // available. Notices say plainly when a category is an approximation.
+// Feature films and cartoons, not ads, training reels or government footage.
+const isMovieShelf = (f: PdFilm) => !f.shelf || f.shelf === "classic" || f.shelf === "open";
+
 const CATEGORY_RULES: Record<CategorySlug, { filter?: (f: PdFilm) => boolean; sort: Sorter; notice?: string }> = {
-  "public-domain": { sort: byPopularity },
-  free: { sort: byPopularity },
-  popular: { sort: byPopularity, notice: "Ranked by Internet Archive views." },
-  trending: { sort: byPopularity, notice: "Weekly trends need a TMDB key. Showing the most viewed public-domain films instead." },
-  "top-rated": { filter: (f) => f.rating !== null, sort: byRating, notice: "Ranked by Internet Archive user reviews (films with 3 or more reviews)." },
-  recent: { sort: byNewest, notice: "New releases need a TMDB key. Showing the newest films in the public-domain catalog." },
-  classics: { filter: (f) => (f.year ?? 9999) < 1980, sort: byPopularity },
-  family: { filter: (f) => f.genres.includes("Family") || f.genres.includes("Animation"), sort: byPopularity },
+  "public-domain": { filter: isMovieShelf, sort: byPopularity },
+  vintage: { filter: (f) => f.shelf === "vintage", sort: byPopularity },
+  government: { filter: (f) => f.shelf === "government", sort: byPopularity },
+  free: { filter: isMovieShelf, sort: byPopularity },
+  popular: { filter: isMovieShelf, sort: byPopularity, notice: "Ranked by Internet Archive views." },
+  trending: { filter: isMovieShelf, sort: byPopularity, notice: "Weekly trends need a TMDB key. Showing the most viewed public-domain films instead." },
+  "top-rated": { filter: (f) => isMovieShelf(f) && f.rating !== null, sort: byRating, notice: "Ranked by Internet Archive user reviews (films with 3 or more reviews)." },
+  recent: { filter: isMovieShelf, sort: byNewest, notice: "New releases need a TMDB key. Showing the newest films in the public-domain catalog." },
+  classics: { filter: (f) => isMovieShelf(f) && (f.year ?? 9999) < 1980, sort: byPopularity },
+  family: { filter: (f) => isMovieShelf(f) && (f.genres.includes("Family") || f.genres.includes("Animation")), sort: byPopularity },
   documentaries: { filter: (f) => f.genres.includes("Documentary"), sort: byPopularity },
 };
 

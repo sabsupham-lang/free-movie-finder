@@ -1,16 +1,40 @@
 import "server-only";
 import rawCatalog from "../../data/public-domain.json";
+import { archiveLibrary } from "./archiveLibrary";
 import { hasTmdb } from "./config";
-import type { CategorySlug } from "./categories";
+import { LOCAL_CATEGORIES, type CategorySlug } from "./categories";
 import type { Filters } from "./filters";
 import { indexByTmdbId, pdOffers, pdToDetail, queryPublicDomain, type PdCatalog, type PdFilm } from "./publicDomain";
 import * as tmdb from "./tmdb";
 import type { MovieDetail, MovieSummary, Page, ProviderOption } from "./types";
 
 export const pdCatalog = rawCatalog as unknown as PdCatalog;
-const pdById = new Map(pdCatalog.films.map((f) => [f.id, f]));
 const pdByTmdb = indexByTmdbId(pdCatalog.films);
 const isPd = (tmdbId: number) => pdByTmdb.has(tmdbId);
+
+// Every film playable on this site: the Wikidata-verified catalog first, then
+// the Internet Archive library. Built on first use.
+let allFilms: PdFilm[] | null = null;
+let byId: Map<string, PdFilm> | null = null;
+export function localFilms(): PdFilm[] {
+  if (!allFilms) allFilms = [...pdCatalog.films, ...archiveLibrary().films];
+  return allFilms;
+}
+function localById(id: string): PdFilm | undefined {
+  if (!byId) byId = new Map(localFilms().map((f) => [f.id, f]));
+  return byId.get(id);
+}
+
+export function libraryStats() {
+  const archive = archiveLibrary();
+  const shelves: Record<string, number> = {};
+  for (const f of archive.films) shelves[f.shelf ?? "classic"] = (shelves[f.shelf ?? "classic"] ?? 0) + 1;
+  return {
+    total: pdCatalog.films.length + archive.films.length,
+    wikidata: { films: pdCatalog.films.length, generatedAt: pdCatalog.generatedAt },
+    archive: { films: archive.films.length, generatedAt: archive.generatedAt, shelves },
+  };
+}
 
 export const DEMO_NOTICE =
   "Demo mode: no TMDB key is configured, so only the public-domain catalog is shown. See the README to enable the full catalog.";
@@ -22,21 +46,31 @@ export type ListResult = Page<MovieSummary> & {
 };
 
 function local(category: CategorySlug | "search", filters: Filters, page: number, extra: string[] = []): ListResult {
-  const res = queryPublicDomain(pdCatalog.films, { category, filters, page });
+  const res = queryPublicDomain(localFilms(), { category, filters, page });
   return { ...res, notices: [...extra, ...res.notices], source: "public-domain" };
 }
 
 // One entry point for every list in the app: categories, search, filters.
 export async function listMovies(category: CategorySlug | "search", filters: Filters, region: string, page: number): Promise<ListResult> {
   const onlyPdProviders = filters.providers.length > 0 && filters.providers.every((p) => p.startsWith("pd:"));
-  if (category === "public-domain" || onlyPdProviders) return local(category, filters, page);
+  if (LOCAL_CATEGORIES.includes(category as CategorySlug) || onlyPdProviders) return local(category, filters, page);
   if (!hasTmdb()) return local(category, filters, page, [DEMO_NOTICE]);
 
   try {
     if (category === "search") {
       if (!filters.q) return { items: [], page: 1, totalPages: 1, totalResults: 0, notices: [], source: "tmdb" };
       if (filters.mode === "person") return { ...(await tmdb.searchPerson(filters, region, page, isPd)), source: "tmdb" };
-      return { ...(await tmdb.searchTitles(filters, page, isPd)), source: "tmdb" };
+      const remote = await tmdb.searchTitles(filters, page, isPd);
+      if (page !== 1) return { ...remote, source: "tmdb" };
+      // TMDB doesn't know the Archive library, so its title matches lead page 1.
+      const extra = queryPublicDomain(archiveLibrary().films, { category: "search", filters, page: 1, pageSize: 6 });
+      return {
+        ...remote,
+        items: [...extra.items, ...remote.items],
+        totalResults: remote.totalResults + extra.totalResults,
+        notices: extra.totalResults > 6 ? [...remote.notices, `${extra.totalResults.toLocaleString()} free Internet Archive films match too. Pick "Internet Archive" under services to see them all.`] : remote.notices,
+        source: "tmdb",
+      };
     }
     return { ...(await tmdb.listCategory(category, filters, region, page, isPd)), source: "tmdb" };
   } catch (err) {
@@ -73,8 +107,8 @@ function mergeTmdb(d: tmdb.TmdbDetail, region: string, pd: PdFilm | undefined): 
 }
 
 export async function getMovie(id: string, region: string): Promise<MovieDetail | null> {
-  if (id.startsWith("pd-")) {
-    const pd = pdById.get(id);
+  if (id.startsWith("pd-") || id.startsWith("ia-")) {
+    const pd = localById(id);
     if (!pd) return null;
     if (pd.tmdbId && hasTmdb()) {
       try {

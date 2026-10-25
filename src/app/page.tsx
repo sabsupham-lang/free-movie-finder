@@ -9,12 +9,14 @@ import { EMPTY_FILTERS } from "@/lib/filters";
 import { getRegion } from "@/lib/region-server";
 import { regionName } from "@/lib/regions";
 
-const DEMO_ROWS: CategorySlug[] = ["public-domain", "top-rated", "family", "documentaries", "recent"];
+const DEMO_ROWS: CategorySlug[] = ["public-domain", "top-rated", "family", "vintage", "government", "documentaries", "recent"];
 const DEMO_BLURBS: Partial<Record<CategorySlug, string>> = {
   "public-domain": "The most watched public-domain films on the Internet Archive.",
   "top-rated": "Best reviewed by Internet Archive users (3 or more reviews).",
   family: "Public-domain family films and cartoons.",
   documentaries: "Public-domain documentaries.",
+  vintage: "Old ads, classroom and industrial films from the Prelinger Archives.",
+  government: "Films by US federal agencies, from the FedFlix collection.",
   recent: "The newest films in the public-domain catalog.",
 };
 

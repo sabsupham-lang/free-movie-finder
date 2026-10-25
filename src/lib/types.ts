@@ -10,7 +10,8 @@ export type MovieSummary = {
   year: number | null;
   posterUrl: string | null;
   rating: Rating | null;
-  publicDomain: boolean; // a verified public-domain copy exists
+  publicDomain: boolean; // a verified free copy plays on this site
+  freeLabel?: string; // badge text for that copy, e.g. "Free · Public domain"
 };
 
 export type Person = { name: string; role?: string; id?: number };
@@ -40,6 +41,7 @@ export type PublicDomainCopy = {
   archiveDownloads: number | null;
   commonsVideo: { url: string; file: string; mime: string } | null;
   rightsNote: string;
+  heading: string; // e.g. "Free: public domain in the US"
 };
 
 export type MovieDetail = MovieSummary & {

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { MovieSummary } from "@/lib/types";
 
-export function Poster({ movie, eager = false }: { movie: Pick<MovieSummary, "title" | "year" | "posterUrl" | "publicDomain">; eager?: boolean }) {
+export function Poster({ movie, eager = false }: { movie: Pick<MovieSummary, "title" | "year" | "posterUrl" | "publicDomain" | "freeLabel">; eager?: boolean }) {
   return (
     <div className="poster">
       {movie.posterUrl ? (
@@ -21,7 +21,7 @@ export function Poster({ movie, eager = false }: { movie: Pick<MovieSummary, "ti
           No poster available
         </div>
       )}
-      {movie.publicDomain && <span className="badge badge-free">Free · Public domain</span>}
+      {movie.publicDomain && <span className="badge badge-free">{movie.freeLabel ?? "Free · Public domain"}</span>}
     </div>
   );
 }

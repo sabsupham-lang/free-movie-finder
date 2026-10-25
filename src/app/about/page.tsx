@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
-import { pdCatalog } from "@/lib/catalog";
+import { libraryStats, pdCatalog } from "@/lib/catalog";
 import { hasTmdb } from "@/lib/config";
 
 export const metadata: Metadata = { title: "About and data sources" };
 
 export default function AboutPage() {
   const generated = new Date(pdCatalog.generatedAt);
+  const stats = libraryStats();
+  const archiveDate = new Date(stats.archive.generatedAt);
   return (
     <div className="prose">
       <h1>About Free Movie Finder</h1>
@@ -45,6 +47,12 @@ export default function AboutPage() {
           <strong>Internet Archive</strong> and <strong>Wikimedia Commons</strong>: the playable public-domain copies.
           Every copy is checked to be online when the catalog is refreshed.
         </li>
+        <li>
+          <strong>Internet Archive library</strong>: more films from the Archive, each listed for a stated reason shown
+          on its page: dated 1930 or earlier, made by a US federal agency (FedFlix), part of the Prelinger Archives, or
+          marked public domain or Creative Commons by the uploader in the Archive&apos;s curated film collections.
+          Uploader labels can be wrong; rights holders can ask us to remove a film using the contact on the Terms page.
+        </li>
       </ul>
 
       <h2>How current is it?</h2>
@@ -55,6 +63,15 @@ export default function AboutPage() {
           {generated.toLocaleDateString("en", { year: "numeric", month: "long", day: "numeric" })}
         </time>{" "}
         and has {pdCatalog.films.length.toLocaleString()} films.
+        {stats.archive.films > 0 && (
+          <>
+            {" "}The Internet Archive library adds {stats.archive.films.toLocaleString()} more and was last rebuilt on{" "}
+            <time dateTime={stats.archive.generatedAt}>
+              {archiveDate.toLocaleDateString("en", { year: "numeric", month: "long", day: "numeric" })}
+            </time>
+            . In total, {stats.total.toLocaleString()} films play on this site.
+          </>
+        )}
       </p>
 
       <h2>Things to know</h2>

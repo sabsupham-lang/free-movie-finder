@@ -1,0 +1,48 @@
+name: Refresh archive library
+
+# Weekly: rebuild data/archive-library.json.gz from the Internet Archive
+# (Prelinger, FedFlix, pre-1931 and rights-marked curated films), validate
+# it, run the tests and commit it if it changed.
+on:
+  schedule:
+    - cron: "41 7 * * 1" # Mondays 07:41 UTC, after the Wikidata refresh
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-commit
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Rebuild archive library
+        run: node scripts/refresh-archive-library.mjs
+        env:
+          CATALOG_CONTACT: https://github.com/${{ github.repository }}
+      - name: Validate catalogs
+        run: npm run validate:catalog
+      - run: npm test
+      - run: npm run build
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/archive-library.json.gz && git ls-files --error-unmatch data/archive-library.json.gz >/dev/null 2>&1; then
+            echo "Library unchanged"
+            exit 0
+          fi
+          git config user.name "catalog-bot"
+          git config user.email "catalog-bot@users.noreply.github.com"
+          git add data/archive-library.json.gz
+          git commit -m "Refresh Internet Archive library"
+          git pull --rebase
+          git push

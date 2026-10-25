@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { pdCatalog } from "@/lib/catalog";
+import { libraryStats, pdCatalog } from "@/lib/catalog";
 import { hasTmdb } from "@/lib/config";
 
 // Read-only status for uptime checks and the refresh workflow. Reports
@@ -11,6 +11,7 @@ export async function GET() {
       ok: true,
       mode: hasTmdb() ? "full" : "demo",
       publicDomainCatalog: { generatedAt: pdCatalog.generatedAt, ageDays, films: pdCatalog.films.length, stale: ageDays > 14 },
+      library: libraryStats(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );
