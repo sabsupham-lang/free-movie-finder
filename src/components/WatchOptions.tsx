@@ -16,7 +16,14 @@ function Offer({ offer }: { offer: WatchOffer }) {
     <li className="offer">
       {offer.logoUrl ? <img src={offer.logoUrl} alt="" width={32} height={32} loading="lazy" referrerPolicy="no-referrer" /> : null}
       <span>
-        {offer.providerName}
+        {offer.url ? (
+          <a href={offer.url} target="_blank" rel="noopener noreferrer">
+            Watch on {offer.providerName} <IconExternal size={14} />
+            <span className="visually-hidden"> (opens in a new tab)</span>
+          </a>
+        ) : (
+          offer.providerName
+        )}
         {offer.note && <small>{offer.note}</small>}
       </span>
     </li>

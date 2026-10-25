@@ -48,6 +48,11 @@ export default function AboutPage() {
           Every copy is checked to be online when the catalog is refreshed.
         </li>
         <li>
+          <strong>Free streaming directory</strong>: {stats.streaming.films.toLocaleString()} films that Wikidata links to
+          a title page on Tubi, Kanopy or Hoopla. They play on those services, not here. Each link is checked when the
+          directory is rebuilt, but services add and remove titles often and some titles are only offered in the US.
+        </li>
+        <li>
           <strong>Internet Archive library</strong>: more films from the Archive, each listed for a stated reason shown
           on its page: dated 1930 or earlier, made by a US federal agency (FedFlix), part of the Prelinger Archives, or
           marked public domain or Creative Commons by the uploader in the Archive&apos;s curated film collections.
@@ -69,7 +74,7 @@ export default function AboutPage() {
             <time dateTime={stats.archive.generatedAt}>
               {archiveDate.toLocaleDateString("en", { year: "numeric", month: "long", day: "numeric" })}
             </time>
-            . In total, {stats.total.toLocaleString()} films play on this site.
+            . In total, {stats.playable.toLocaleString()} films play on this site.
           </>
         )}
       </p>

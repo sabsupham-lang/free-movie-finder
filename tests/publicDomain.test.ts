@@ -150,3 +150,46 @@ describe("Archive library shelves and labels", () => {
     expect(pdOffers(lib[2])[0].note).toBe("Creative Commons, no account needed");
   });
 });
+
+describe("streaming directory films", () => {
+  const tubi = film({
+    id: "wd-Q99",
+    wikidataId: "Q99",
+    title: "Popular Thriller",
+    year: 2012,
+    archive: null,
+    commonsVideo: null,
+    shelf: "streaming",
+    popularity: 60000,
+    rights: { status: "licensed", jurisdiction: "US", basis: "Licensed to the streaming service." },
+    streaming: [
+      { service: "tubi", name: "Tubi", url: "https://tubitv.com/movies/1", kind: "ads", note: "Free with ads, no subscription", status: "verified" },
+      { service: "kanopy", name: "Kanopy", url: "https://www.kanopy.com/product/2", kind: "free", note: "Free with a library card", status: "unchecked" },
+    ],
+  });
+  const all = [...films, tubi];
+
+  it("never claims to play on this site", () => {
+    const d = pdToDetail(tubi, "US");
+    expect(d.publicDomain).toBe(false);
+    expect(d.publicDomainCopy).toBeNull();
+    expect(d.freeLabel).toBe("Free on Tubi");
+  });
+
+  it("links each service and flags unconfirmed listings", () => {
+    const d = pdToDetail(tubi, "US");
+    expect(d.availability.status).toBe("known");
+    expect(d.availability.offers.map((o) => [o.kind, o.url])).toEqual([
+      ["ads", "https://tubitv.com/movies/1"],
+      ["free", "https://www.kanopy.com/product/2"],
+    ]);
+    expect(d.availability.offers[1].note).toContain("not confirmed");
+  });
+
+  it("has its own shelf and filter", () => {
+    expect(queryPublicDomain(all, { category: "streaming", filters: EMPTY_FILTERS, page: 1 }).items.map((m) => m.id)).toEqual(["wd-Q99"]);
+    expect(queryPublicDomain(all, { category: "public-domain", filters: EMPTY_FILTERS, page: 1 }).items.map((m) => m.id)).not.toContain("wd-Q99");
+    const f = parseFilters(new URLSearchParams({ provider: "wd:kanopy" }));
+    expect(queryPublicDomain(all, { category: "search", filters: f, page: 1 }).items.map((m) => m.id)).toEqual(["wd-Q99"]);
+  });
+});

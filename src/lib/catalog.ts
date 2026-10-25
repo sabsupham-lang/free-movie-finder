@@ -1,6 +1,6 @@
 import "server-only";
 import rawCatalog from "../../data/public-domain.json";
-import { archiveLibrary } from "./archiveLibrary";
+import { archiveLibrary, streamingDirectory } from "./archiveLibrary";
 import { hasTmdb } from "./config";
 import { LOCAL_CATEGORIES, type CategorySlug } from "./categories";
 import type { Filters } from "./filters";
@@ -17,7 +17,11 @@ const isPd = (tmdbId: number) => pdByTmdb.has(tmdbId);
 let allFilms: PdFilm[] | null = null;
 let byId: Map<string, PdFilm> | null = null;
 export function localFilms(): PdFilm[] {
-  if (!allFilms) allFilms = [...pdCatalog.films, ...archiveLibrary().films];
+  if (!allFilms) {
+    // A streaming-directory film that is also in a playable catalog is shown once, as playable.
+    const playable = new Set(pdCatalog.films.map((f) => f.wikidataId));
+    allFilms = [...pdCatalog.films, ...archiveLibrary().films, ...streamingDirectory().films.filter((f) => !playable.has(f.wikidataId))];
+  }
   return allFilms;
 }
 function localById(id: string): PdFilm | undefined {
@@ -29,8 +33,11 @@ export function libraryStats() {
   const archive = archiveLibrary();
   const shelves: Record<string, number> = {};
   for (const f of archive.films) shelves[f.shelf ?? "classic"] = (shelves[f.shelf ?? "classic"] ?? 0) + 1;
+  const streaming = streamingDirectory();
   return {
-    total: pdCatalog.films.length + archive.films.length,
+    total: localFilms().length,
+    playable: pdCatalog.films.length + archive.films.length,
+    streaming: { films: localFilms().length - pdCatalog.films.length - archive.films.length, generatedAt: streaming.generatedAt },
     wikidata: { films: pdCatalog.films.length, generatedAt: pdCatalog.generatedAt },
     archive: { films: archive.films.length, generatedAt: archive.generatedAt, shelves },
   };
@@ -52,7 +59,7 @@ function local(category: CategorySlug | "search", filters: Filters, page: number
 
 // One entry point for every list in the app: categories, search, filters.
 export async function listMovies(category: CategorySlug | "search", filters: Filters, region: string, page: number): Promise<ListResult> {
-  const onlyPdProviders = filters.providers.length > 0 && filters.providers.every((p) => p.startsWith("pd:"));
+  const onlyPdProviders = filters.providers.length > 0 && filters.providers.every((p) => p.startsWith("pd:") || p.startsWith("wd:"));
   if (LOCAL_CATEGORIES.includes(category as CategorySlug) || onlyPdProviders) return local(category, filters, page);
   if (!hasTmdb()) return local(category, filters, page, [DEMO_NOTICE]);
 
@@ -64,6 +71,7 @@ export async function listMovies(category: CategorySlug | "search", filters: Fil
       if (page !== 1) return { ...remote, source: "tmdb" };
       // TMDB doesn't know the Archive library, so its title matches lead page 1.
       const extra = queryPublicDomain(archiveLibrary().films, { category: "search", filters, page: 1, pageSize: 6 });
+      // Streaming-directory films are found by TMDB itself, with live availability.
       return {
         ...remote,
         items: [...extra.items, ...remote.items],
@@ -107,7 +115,7 @@ function mergeTmdb(d: tmdb.TmdbDetail, region: string, pd: PdFilm | undefined): 
 }
 
 export async function getMovie(id: string, region: string): Promise<MovieDetail | null> {
-  if (id.startsWith("pd-") || id.startsWith("ia-")) {
+  if (id.startsWith("pd-") || id.startsWith("ia-") || id.startsWith("wd-")) {
     const pd = localById(id);
     if (!pd) return null;
     if (pd.tmdbId && hasTmdb()) {
@@ -130,6 +138,9 @@ export async function providerOptions(region: string): Promise<ProviderOption[]>
   const pd: ProviderOption[] = [
     { id: "pd:archive", name: "Internet Archive (public domain)", logoUrl: null },
     { id: "pd:commons", name: "Wikimedia Commons (public domain)", logoUrl: null },
+    { id: "wd:tubi", name: "Tubi (free with ads)", logoUrl: null },
+    { id: "wd:kanopy", name: "Kanopy (library card)", logoUrl: null },
+    { id: "wd:hoopla", name: "Hoopla (library card)", logoUrl: null },
   ];
   if (!hasTmdb()) return pd;
   try {

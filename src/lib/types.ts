@@ -24,6 +24,7 @@ export type WatchOffer = {
   providerName: string;
   logoUrl: string | null;
   note?: string;
+  url?: string; // direct link to the title on the service, when known
 };
 
 export type Availability = {

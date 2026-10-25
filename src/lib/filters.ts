@@ -14,7 +14,7 @@ export type Filters = {
   runtimeMin: number | null;
   runtimeMax: number | null;
   freeOnly: boolean;
-  providers: string[]; // "tmdb:8", "pd:archive", "pd:commons"
+  providers: string[]; // "tmdb:8", "pd:archive", "pd:commons", "wd:tubi"
   sort: SortKey;
 };
 
@@ -50,7 +50,7 @@ function int(value: string | null, min: number, max: number): number | null {
 }
 
 const SORTS: SortKey[] = ["default", "popularity", "rating", "newest", "oldest", "title"];
-const PROVIDER_RE = /^(tmdb:\d{1,6}|pd:(archive|commons))$/;
+const PROVIDER_RE = /^(tmdb:\d{1,6}|pd:(archive|commons)|wd:(tubi|kanopy|hoopla))$/;
 
 // Untrusted query-string input in, validated Filters out. Anything that
 // does not match an allowed value is dropped rather than passed upstream.

@@ -21,7 +21,7 @@ const csp = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // The Archive library is read from disk at runtime (src/lib/archiveLibrary.ts).
-  outputFileTracingIncludes: { "/**": ["./data/archive-library.json.gz"] },
+  outputFileTracingIncludes: { "/**": ["./data/archive-library.json.gz", "./data/streaming-directory.json.gz"] },
   async headers() {
     return [
       {

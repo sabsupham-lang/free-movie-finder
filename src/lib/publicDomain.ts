@@ -3,8 +3,17 @@ import type { CategorySlug } from "./categories";
 import type { MovieDetail, MovieSummary, Page, PublicDomainCopy, WatchOffer } from "./types";
 
 // Shape of data/public-domain.json (written by scripts/refresh-public-domain.mjs).
+export type StreamingLink = {
+  service: string; // "tubi" | "kanopy" | "hoopla"
+  name: string;
+  url: string;
+  kind: "free" | "ads";
+  note: string;
+  status: "verified" | "unchecked";
+};
+
 export type PdFilm = {
-  id: string; // "pd-Q123" (Wikidata catalog) or "ia-<identifier>" (Archive library)
+  id: string; // "pd-Q123" (Wikidata catalog), "ia-<identifier>" (Archive library) or "wd-Q123" (streaming directory)
   wikidataId: string | null;
   title: string;
   year: number | null;
@@ -27,15 +36,19 @@ export type PdFilm = {
   archive: { identifier: string; downloads: number; avgRating: number | null; numReviews: number; alternates: number } | null;
   commonsVideo: { file: string; url: string; mime: string; durationSeconds: number | null } | null;
   rights: {
-    status: "public-domain" | "creative-commons";
+    status: "public-domain" | "creative-commons" | "licensed";
     jurisdiction: string;
     basis: string; // plain-language reason shown on the film page
     reason?: "age" | "us-gov" | "prelinger" | "uploader-pd" | "cc"; // Archive library only
     license?: string; // Creative Commons license URL
   };
   // Archive library only: which shelf the film is browsed under.
-  shelf?: "classic" | "vintage" | "government" | "open";
+  shelf?: "classic" | "vintage" | "government" | "open" | "streaming";
+  // Streaming directory only: where the film plays, on the service's own site.
+  streaming?: StreamingLink[];
 };
+
+export const playsHere = (f: PdFilm) => Boolean(f.archive || f.commonsVideo);
 
 export type PdCatalog = {
   schemaVersion: number;
@@ -56,6 +69,10 @@ export function rightsNote(f: PdFilm): string {
 }
 
 export function freeLabel(f: PdFilm): string {
+  if (f.streaming?.length) {
+    const ads = f.streaming.find((s) => s.kind === "ads");
+    return ads ? `Free on ${ads.name}` : `Free with library card`;
+  }
   if (f.rights.status === "creative-commons") return "Free · Creative Commons";
   if (f.rights.reason === "us-gov") return "Free · US government film";
   return "Free · Public domain";
@@ -74,7 +91,7 @@ export function pdToSummary(f: PdFilm): MovieSummary {
     year: f.year,
     posterUrl: f.poster?.url ?? null,
     rating: f.rating ? { value: f.rating.value, votes: f.rating.votes, source: f.rating.source } : null,
-    publicDomain: true,
+    publicDomain: playsHere(f),
     freeLabel: freeLabel(f),
   };
 }
@@ -87,6 +104,17 @@ export function pdCopy(f: PdFilm): PublicDomainCopy {
     rightsNote: rightsNote(f),
     heading: freeHeading(f),
   };
+}
+
+function streamingOffers(f: PdFilm): WatchOffer[] {
+  return (f.streaming ?? []).map((s) => ({
+    kind: s.kind,
+    providerId: `wd:${s.service}`,
+    providerName: s.name,
+    logoUrl: null,
+    note: s.status === "verified" ? s.note : `${s.note}. Listing not confirmed recently`,
+    url: s.url,
+  }));
 }
 
 export function pdOffers(f: PdFilm): WatchOffer[] {
@@ -113,16 +141,18 @@ export function pdToDetail(f: PdFilm, region: string): MovieDetail {
     cast: f.cast.map((name) => ({ name })),
     backdropUrl: null,
     trailer: null,
-    availability: {
-      region,
-      status: "unknown",
-      source: null,
-      link: null,
-      offers: [],
-    },
-    publicDomainCopy: pdCopy(f),
+    availability: f.streaming?.length
+      ? {
+          region,
+          status: "known",
+          source: "Wikidata (community-maintained; the service may have removed the title, and some titles are US-only)",
+          link: null,
+          offers: streamingOffers(f),
+        }
+      : { region, status: "unknown", source: null, link: null, offers: [] },
+    publicDomainCopy: playsHere(f) ? pdCopy(f) : null,
     externalIds: { imdb: f.imdbId, tmdb: f.tmdbId, wikidata: f.wikidataId },
-    metadataSource: f.wikidataId ? "Wikidata and Internet Archive" : "the Internet Archive (uploader-provided)",
+    metadataSource: f.streaming ? "Wikidata" : f.wikidataId ? "Wikidata and Internet Archive" : "the Internet Archive (uploader-provided)",
   };
 }
 
@@ -142,10 +172,11 @@ function matchesFilters(f: PdFilm, flt: Filters): boolean {
   if (flt.minRating && (!f.rating || f.rating.value < flt.minRating)) return false;
   if (flt.runtimeMin && (f.runtimeMinutes === null || f.runtimeMinutes < flt.runtimeMin)) return false;
   if (flt.runtimeMax && (f.runtimeMinutes === null || f.runtimeMinutes > flt.runtimeMax)) return false;
-  const pdProviders = flt.providers.filter((p) => p.startsWith("pd:"));
-  if (pdProviders.length) {
-    const has = (p: string) => (p === "pd:archive" ? Boolean(f.archive) : Boolean(f.commonsVideo));
-    if (!pdProviders.some(has)) return false;
+  const localProviders = flt.providers.filter((p) => p.startsWith("pd:") || p.startsWith("wd:"));
+  if (localProviders.length) {
+    const has = (p: string) =>
+      p === "pd:archive" ? Boolean(f.archive) : p === "pd:commons" ? Boolean(f.commonsVideo) : Boolean(f.streaming?.some((s) => `wd:${s.service}` === p));
+    if (!localProviders.some(has)) return false;
   }
   return true;
 }
@@ -161,18 +192,20 @@ const byTitle: Sorter = (a, b) => a.title.localeCompare(b.title);
 // available. Notices say plainly when a category is an approximation.
 // Feature films and cartoons, not ads, training reels or government footage.
 const isMovieShelf = (f: PdFilm) => !f.shelf || f.shelf === "classic" || f.shelf === "open";
+const isStreaming = (f: PdFilm) => f.shelf === "streaming";
 
 const CATEGORY_RULES: Record<CategorySlug, { filter?: (f: PdFilm) => boolean; sort: Sorter; notice?: string }> = {
   "public-domain": { filter: isMovieShelf, sort: byPopularity },
+  streaming: { filter: isStreaming, sort: byPopularity, notice: "These play on Tubi, Kanopy or Hoopla, not on this site. Ranked by how widely the film is covered on Wikipedia." },
   vintage: { filter: (f) => f.shelf === "vintage", sort: byPopularity },
   government: { filter: (f) => f.shelf === "government", sort: byPopularity },
-  free: { filter: isMovieShelf, sort: byPopularity },
-  popular: { filter: isMovieShelf, sort: byPopularity, notice: "Ranked by Internet Archive views." },
+  free: { filter: (f) => isMovieShelf(f) || isStreaming(f), sort: byPopularity },
+  popular: { filter: isStreaming, sort: byPopularity, notice: "Popular films free on Tubi, Kanopy or Hoopla, ranked by how widely they are covered on Wikipedia." },
   trending: { filter: isMovieShelf, sort: byPopularity, notice: "Weekly trends need a TMDB key. Showing the most viewed public-domain films instead." },
   "top-rated": { filter: (f) => isMovieShelf(f) && f.rating !== null, sort: byRating, notice: "Ranked by Internet Archive user reviews (films with 3 or more reviews)." },
-  recent: { filter: isMovieShelf, sort: byNewest, notice: "New releases need a TMDB key. Showing the newest films in the public-domain catalog." },
-  classics: { filter: (f) => isMovieShelf(f) && (f.year ?? 9999) < 1980, sort: byPopularity },
-  family: { filter: (f) => isMovieShelf(f) && (f.genres.includes("Family") || f.genres.includes("Animation")), sort: byPopularity },
+  recent: { filter: (f) => isMovieShelf(f) || isStreaming(f), sort: byNewest, notice: "New releases need a TMDB key. Showing the newest films in the local catalogs." },
+  classics: { filter: (f) => (isMovieShelf(f) || isStreaming(f)) && (f.year ?? 9999) < 1980, sort: byPopularity },
+  family: { filter: (f) => (isMovieShelf(f) || isStreaming(f)) && (f.genres.includes("Family") || f.genres.includes("Animation")), sort: byPopularity },
   documentaries: { filter: (f) => f.genres.includes("Documentary"), sort: byPopularity },
 };
 

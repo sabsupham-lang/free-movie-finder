@@ -79,10 +79,37 @@ if (lib) {
   if ((lib.films?.length ?? 0) < minLib) fail(`library has only ${lib.films?.length} films; expected at least ${minLib}`);
 }
 
+// The optional streaming directory (data/streaming-directory.json.gz).
+let dir = null;
+try {
+  dir = JSON.parse(gunzipSync(await readFile(path.join(ROOT, "data", "streaming-directory.json.gz"))).toString("utf8"));
+} catch (err) {
+  if (err.code !== "ENOENT") fail(`streaming directory unreadable: ${err.message}`);
+}
+if (dir) {
+  const HOSTS = { tubi: "https://tubitv.com/", kanopy: "https://www.kanopy.com/", hoopla: "https://www.hoopladigital.com/" };
+  const dirIds = new Set();
+  for (const [i, f] of (dir.films ?? []).entries()) {
+    const at = `directory[${i}] (${f?.title ?? "?"})`;
+    if (!/^wd-Q\d+$/.test(f.id) || f.id !== `wd-${f.wikidataId}`) fail(`${at}: bad id`);
+    if (dirIds.has(f.id)) fail(`${at}: duplicate id`);
+    dirIds.add(f.id);
+    if (!isStr(f.title)) fail(`${at}: missing title`);
+    if (f.archive || f.commonsVideo) fail(`${at}: directory films must not claim a playable copy`);
+    if (f.shelf !== "streaming" || f.rights?.status !== "licensed") fail(`${at}: wrong shelf or rights`);
+    if (!Array.isArray(f.streaming) || !f.streaming.length) fail(`${at}: no streaming links`);
+    for (const l of f.streaming ?? []) {
+      if (!HOSTS[l.service] || !String(l.url).startsWith(HOSTS[l.service])) fail(`${at}: bad ${l.service} link ${l.url}`);
+      if (!["verified", "unchecked"].includes(l.status)) fail(`${at}: bad link status ${l.status}`);
+    }
+  }
+}
+
 if (errors.length) {
   console.error(`Catalog invalid (${errors.length}${errors.length === 50 ? "+" : ""} problems):`);
   for (const e of errors) console.error(`  - ${e}`);
   process.exit(1);
 }
 console.log(`Catalog OK: ${data.films.length} films, generated ${data.generatedAt}`);
+if (dir) console.log(`Streaming directory OK: ${dir.films.length} films, generated ${dir.generatedAt}`);
 if (lib) console.log(`Archive library OK: ${lib.films.length} films, generated ${lib.generatedAt}`);

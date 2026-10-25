@@ -9,10 +9,11 @@ export type CategorySlug =
   | "free"
   | "public-domain"
   | "vintage"
-  | "government";
+  | "government"
+  | "streaming";
 
 // Categories served only from the local catalogs, never from TMDB.
-export const LOCAL_CATEGORIES: CategorySlug[] = ["public-domain", "vintage", "government"];
+export const LOCAL_CATEGORIES: CategorySlug[] = ["public-domain", "vintage", "government", "streaming"];
 
 export type Category = {
   slug: CategorySlug;
@@ -21,6 +22,7 @@ export type Category = {
 };
 
 export const CATEGORIES: Category[] = [
+  { slug: "streaming", title: "Free on Tubi, Kanopy & Hoopla", blurb: "Well-known films listed on free services. They play on the service's site; Kanopy and Hoopla need a library card." },
   { slug: "free", title: "Free to watch", blurb: "Films listed as free or free with ads in your country." },
   { slug: "public-domain", title: "Public domain", blurb: "Films out of copyright in the US, playable right here." },
   { slug: "vintage", title: "Vintage ads & educational films", blurb: "Old commercials, classroom and industrial films from the Prelinger Archives, playable right here." },

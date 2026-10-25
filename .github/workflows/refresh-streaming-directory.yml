@@ -1,0 +1,48 @@
+name: Refresh streaming directory
+
+# Weekly: rebuild data/streaming-directory.json.gz (films Wikidata links to
+# Tubi, Kanopy or Hoopla), re-check every link, validate, test, build and
+# commit it if it changed.
+on:
+  schedule:
+    - cron: "13 8 * * 1" # Mondays 08:13 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: catalog-commit
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Rebuild streaming directory
+        run: node scripts/refresh-streaming-directory.mjs
+        env:
+          CATALOG_CONTACT: https://github.com/${{ github.repository }}
+      - name: Validate catalogs
+        run: npm run validate:catalog
+      - run: npm test
+      - run: npm run build
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/streaming-directory.json.gz && git ls-files --error-unmatch data/streaming-directory.json.gz >/dev/null 2>&1; then
+            echo "Directory unchanged"
+            exit 0
+          fi
+          git config user.name "catalog-bot"
+          git config user.email "catalog-bot@users.noreply.github.com"
+          git add data/streaming-directory.json.gz
+          git commit -m "Refresh streaming directory"
+          git pull --rebase
+          git push

@@ -21,7 +21,7 @@ export function Poster({ movie, eager = false }: { movie: Pick<MovieSummary, "ti
           No poster available
         </div>
       )}
-      {movie.publicDomain && <span className="badge badge-free">{movie.freeLabel ?? "Free · Public domain"}</span>}
+      {(movie.publicDomain || movie.freeLabel) && <span className="badge badge-free">{movie.freeLabel ?? "Free · Public domain"}</span>}
     </div>
   );
 }
