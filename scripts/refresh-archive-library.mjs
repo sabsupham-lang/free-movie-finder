@@ -5,7 +5,7 @@
 //
 //   age          dated 1930 or earlier in a curated film collection
 //                (US copyright has expired for works published before 1931)
-//   us-gov       FedFlix films made by US federal agencies (17 U.S.C. 105)
+//   us-gov       US Government Films / FedFlix items by federal agencies (17 U.S.C. 105)
 //   prelinger    Prelinger Archives (ads, educational and industrial films)
 //   uploader-pd  marked public domain by the uploader, curated film collections only
 //   cc           Creative Commons license chosen by the uploader, curated collections only
@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import {
   asArray,
   classifyArchiveItem,
+  dedupeKey,
   isAdultItem,
   cleanDescription,
   COLLECTION_GENRES,
@@ -47,7 +48,7 @@ const curated = `collection:(${CURATED_COLLECTIONS.join(" OR ")})`;
 // Queries are broad on purpose; classifyArchiveItem decides per item.
 const QUERIES = [
   { name: "curated, dated 1930 or earlier", q: `mediatype:movies AND ${curated} AND year:[1870 TO 1930]` },
-  { name: "FedFlix", q: "mediatype:movies AND collection:FedFlix" },
+  { name: "US Government Films (incl. FedFlix)", q: "mediatype:movies AND collection:usgovfilms" },
   { name: "Prelinger Archives", q: "mediatype:movies AND collection:prelinger" },
   { name: "curated, marked public domain", q: `mediatype:movies AND ${curated} AND licenseurl:*publicdomain*` },
   { name: "curated, Creative Commons", q: `mediatype:movies AND ${curated} AND licenseurl:*creativecommons*` },
@@ -96,7 +97,7 @@ async function scrape(q) {
 
 const BASIS_TEXT = {
   age: "Dated 1930 or earlier on the Internet Archive. Works published in the US before 1931 are in the public domain there.",
-  "us-gov": "Made by a US federal agency (FedFlix collection). Works of the US federal government are not protected by copyright in the US.",
+  "us-gov": "Made by a US federal agency (Internet Archive's US Government Films and FedFlix collections). Works of the US federal government are not protected by copyright in the US.",
   prelinger: "From the Prelinger Archives, which Rick Prelinger released for free public use.",
   "uploader-pd": "Marked as public domain by the person who uploaded it to the Internet Archive.",
   cc: "Shared under a Creative Commons license chosen by the uploader.",
@@ -184,7 +185,27 @@ async function main() {
     console.log(`${name}: ${items.length} items found, ${added} new kept, ${adult} left out as adult content`);
   }
 
-  const films = [...seen.values()].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
+  // Several uploads of one film: keep the most viewed, count the rest as
+  // alternates. Films already in the Wikidata catalog are dropped too.
+  const pdKeys = new Set(pd.films.map((f) => dedupeKey(f.title, f.year)).filter(Boolean));
+  const groups = new Map();
+  let duplicates = 0;
+  let inPd = 0;
+  for (const rec of [...seen.values()].sort((a, b) => b.popularity - a.popularity)) {
+    const key = dedupeKey(rec.title, rec.year);
+    if (key && pdKeys.has(key)) {
+      inPd++;
+      continue;
+    }
+    if (key && groups.has(key)) {
+      groups.get(key).archive.alternates++;
+      duplicates++;
+      continue;
+    }
+    groups.set(key ?? rec.id, rec);
+  }
+  console.log(`Merged ${duplicates} duplicate uploads; dropped ${inPd} already in the Wikidata catalog`);
+  const films = [...groups.values()].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));
   const byReason = {};
   const byShelf = {};
   for (const f of films) {

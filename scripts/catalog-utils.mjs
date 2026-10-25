@@ -124,7 +124,7 @@ const NON_FEDERAL = /universit|college|state of |county|city of|school district|
 // Decides whether an Archive item may be listed, and why. Returns null when
 // it should be left out. Order matters: the strongest reason wins.
 //   age:         dated 1930 or earlier (US copyright has expired for works published before 1931)
-//   us-gov:      FedFlix film made by a US federal agency (17 U.S.C. 105)
+//   us-gov:      FedFlix / US Government Films item made by a federal agency (17 U.S.C. 105)
 //   prelinger:   Prelinger Archives, released by the collector without restriction
 //   uploader-pd: uploader marked it public domain (curated film collections only)
 //   cc:          Creative Commons license chosen by the uploader (curated film collections only)
@@ -138,7 +138,8 @@ export function classifyArchiveItem(item, { pdCutoffYear = 1930 } = {}) {
   const cc = /creativecommons\.org\/licenses\//.test(license);
 
   if (curated && year !== null && year <= pdCutoffYear) return { basis: "age", shelf: "classic" };
-  if (collections.includes("FedFlix") && (!NON_FEDERAL.test(creator) || pdMark)) return { basis: "us-gov", shelf: "government" };
+  const govFilm = collections.includes("FedFlix") || collections.includes("usgovfilms");
+  if (govFilm && (!NON_FEDERAL.test(creator) || pdMark)) return { basis: "us-gov", shelf: "government" };
   if (collections.includes("prelinger")) return { basis: "prelinger", shelf: "vintage" };
   if (curated && pdMark) return { basis: "uploader-pd", shelf: "classic" };
   if (curated && cc) return { basis: "cc", shelf: "open", license };
@@ -179,4 +180,20 @@ export function isAdultItem(item) {
     String(asArray(item.description)[0] ?? "").slice(0, 400),
   ].join(" ");
   return ADULT.test(text) || asArray(item.collection).some((c) => /adult|erotic/i.test(String(c)));
+}
+
+// Same film uploaded more than once: compare titles without punctuation,
+// leading articles or a "(1942)" suffix, plus the year. Very short titles
+// are never merged, since "Reel 1" or "Untitled" say nothing about the film.
+export function dedupeKey(title, year) {
+  const t = String(title)
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\((18|19|20)\d\d\)/g, " ")
+    .replace(/^(the|a|an) /, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+  if (t.length < 6 || /^(reel|part|untitled|episode|clip|tape|film|video|roll)( [a-z]?\d+[a-z]?)*$/.test(t)) return null;
+  return `${t}|${year ?? ""}`;
 }

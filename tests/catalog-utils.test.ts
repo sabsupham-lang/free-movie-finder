@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyArchiveItem, isAdultItem, cleanDescription, normalizeGenres, parseLanguages, parseRuntime, parseYear } from "../scripts/catalog-utils.mjs";
+import { classifyArchiveItem, dedupeKey, isAdultItem, cleanDescription, normalizeGenres, parseLanguages, parseRuntime, parseYear } from "../scripts/catalog-utils.mjs";
 import { parseStored } from "@/lib/storage";
 
 describe("normalizeGenres", () => {
@@ -79,5 +79,18 @@ describe("isAdultItem", () => {
     expect(isAdultItem({ title: "Short", subject: ["Burlesque", "1950s"] })).toBe(true);
     expect(isAdultItem({ title: "Sex Madness" })).toBe(false);
     expect(isAdultItem({ title: "His Girl Friday", subject: "comedy" })).toBe(false);
+  });
+});
+
+describe("dedupeKey", () => {
+  it("matches the same film uploaded twice", () => {
+    expect(dedupeKey("The Battle of Midway", 1942)).toBe(dedupeKey("Battle Of Midway (1942)", 1942));
+    expect(dedupeKey("Battle of Midway", 1942)).not.toBe(dedupeKey("Battle of Midway", 1976));
+  });
+  it("never merges uninformative titles", () => {
+    expect(dedupeKey("Reel 1", null)).toBeNull();
+  });
+  it("treats the US Government Films collection as federal", () => {
+    expect(classifyArchiveItem({ collection: ["usgovfilms"], creator: "NASA" })?.basis).toBe("us-gov");
   });
 });
