@@ -1,5 +1,16 @@
 # Deployment
 
+## Current live setup
+
+- Live site: https://free-movie-finder.vercel.app (Vercel project `free-movie-finder`, Hobby plan).
+- Code: https://github.com/sabsupham-lang/free-movie-finder (public).
+- Vercel is **not yet linked to GitHub** (linking needs a one-time "Connect GitHub" click in Vercel, which opens a popup). Until then the project's **Install Command** downloads the latest `main` from GitHub:
+  `curl -fsSL https://codeload.github.com/sabsupham-lang/free-movie-finder/tar.gz/main | tar xz --strip-components=1 && npm ci`
+  so pushing to `main` does not redeploy by itself. To ship new code, press **Redeploy** on the latest deployment in Vercel.
+- Once you connect GitHub (Project > Settings > Git > GitHub, pick this repo), set the Install Command back to default (Settings > Build and Deployment > Install Command: turn the override off). From then on every push deploys automatically.
+- Environment variables already set on Vercel: `DEFAULT_REGION`, `NEXT_PUBLIC_SITE_URL`, `SITE_OPERATOR_NAME`, `SITE_HOSTING_PROVIDER`, `SITE_GOVERNING_LAW`, `SITE_LEGAL_EFFECTIVE_DATE`. Still to add: `TMDB_READ_TOKEN`, `SITE_CONTACT_EMAIL`, and optionally `REVALIDATE_SECRET`. Redeploy after adding them.
+- GitHub Actions: `CI` (type check, tests, catalog validation, build) runs on every push; `Refresh catalog` runs weekly.
+
 Both options below cost nothing for a personal, non-commercial site.
 
 ## Vercel (recommended)
