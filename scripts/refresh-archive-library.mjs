@@ -22,6 +22,7 @@ import { fileURLToPath } from "node:url";
 import {
   asArray,
   classifyArchiveItem,
+  isAdultItem,
   cleanDescription,
   COLLECTION_GENRES,
   CURATED_COLLECTIONS,
@@ -166,8 +167,13 @@ async function main() {
   for (const { name, q } of QUERIES) {
     const items = await scrape(q);
     let added = 0;
+    let adult = 0;
     for (const item of items) {
       if (!item.identifier || seen.has(item.identifier) || alreadyListed.has(item.identifier)) continue;
+      if (isAdultItem(item)) {
+        adult++;
+        continue;
+      }
       const rights = classifyArchiveItem(item);
       if (!rights) continue;
       const rec = toRecord(item, rights);
@@ -175,7 +181,7 @@ async function main() {
       seen.set(item.identifier, rec);
       added++;
     }
-    console.log(`${name}: ${items.length} items found, ${added} new kept`);
+    console.log(`${name}: ${items.length} items found, ${added} new kept, ${adult} left out as adult content`);
   }
 
   const films = [...seen.values()].sort((a, b) => b.popularity - a.popularity || a.title.localeCompare(b.title));

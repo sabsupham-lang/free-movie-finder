@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyArchiveItem, cleanDescription, normalizeGenres, parseLanguages, parseRuntime, parseYear } from "../scripts/catalog-utils.mjs";
+import { classifyArchiveItem, isAdultItem, cleanDescription, normalizeGenres, parseLanguages, parseRuntime, parseYear } from "../scripts/catalog-utils.mjs";
 import { parseStored } from "@/lib/storage";
 
 describe("normalizeGenres", () => {
@@ -70,5 +70,14 @@ describe("archive library helpers", () => {
     expect(classifyArchiveItem({ collection: ["short_films"], licenseurl: "http://creativecommons.org/licenses/by/3.0/" })?.basis).toBe("cc");
     // Uploads outside the curated film collections are never listed on a label alone.
     expect(classifyArchiveItem({ collection: ["opensource_movies"], licenseurl: "http://creativecommons.org/licenses/by/3.0/" })).toBeNull();
+  });
+});
+
+describe("isAdultItem", () => {
+  it("leaves out explicit material but keeps ordinary titles", () => {
+    expect(isAdultItem({ title: "1940s French stag film" })).toBe(true);
+    expect(isAdultItem({ title: "Short", subject: ["Burlesque", "1950s"] })).toBe(true);
+    expect(isAdultItem({ title: "Sex Madness" })).toBe(false);
+    expect(isAdultItem({ title: "His Girl Friday", subject: "comedy" })).toBe(false);
   });
 });

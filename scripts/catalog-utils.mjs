@@ -167,3 +167,16 @@ export const COLLECTION_GENRES = {
   comedy_films: "comedy",
   short_films: "short film",
 };
+
+// Keeps explicit material off a general-audience site. Checked against the
+// title, subjects and the start of the description.
+const ADULT = /\b(stag films?|porn\w*|xxx|nudes?|nudity|nudists?|naked|erotic\w*|fetish\w*|spank\w*|sexploitation|strip ?tease|stripper|hardcore|softcore|smut|nsfw|burlesque|peep ?show|girlie|bondage|bdsm)\b/i;
+
+export function isAdultItem(item) {
+  const text = [
+    ...asArray(item.title),
+    ...asArray(item.subject),
+    String(asArray(item.description)[0] ?? "").slice(0, 400),
+  ].join(" ");
+  return ADULT.test(text) || asArray(item.collection).some((c) => /adult|erotic/i.test(String(c)));
+}
