@@ -1,0 +1,51 @@
+name: Refresh catalog
+
+# Weekly: rebuild the public-domain catalog from Wikidata, the Internet
+# Archive and Wikimedia Commons, validate it, and commit it if it changed.
+# The commit triggers a redeploy on Vercel or Netlify. Then ask the live
+# site to drop its cached TMDB availability.
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Rebuild public-domain catalog
+        run: npm run refresh:catalog
+        env:
+          CATALOG_CONTACT: https://github.com/${{ github.repository }}
+      - name: Validate catalog
+        run: npm run validate:catalog
+      - run: npm test
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- data/public-domain.json; then
+            echo "Catalog unchanged"
+            exit 0
+          fi
+          git config user.name "catalog-bot"
+          git config user.email "catalog-bot@users.noreply.github.com"
+          git add data/public-domain.json
+          git commit -m "Refresh public-domain catalog"
+          git push
+      - name: Clear cached availability on the live site
+        if: ${{ vars.SITE_URL != '' }}
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+          REVALIDATE_SECRET: ${{ secrets.REVALIDATE_SECRET }}
+        run: |
+          if [ -z "$REVALIDATE_SECRET" ]; then echo "REVALIDATE_SECRET not set, skipping"; exit 0; fi
+          curl -fsS -X POST "$SITE_URL/api/revalidate" -H "Authorization: Bearer $REVALIDATE_SECRET"
