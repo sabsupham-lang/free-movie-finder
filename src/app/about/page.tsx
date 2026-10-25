@@ -49,8 +49,9 @@ export default function AboutPage() {
         </li>
         <li>
           <strong>Free streaming directory</strong>: {stats.streaming.films.toLocaleString()} films that Wikidata links to
-          a title page on Tubi, Kanopy or Hoopla. They play on those services, not here. Each link is checked when the
-          directory is rebuilt, but services add and remove titles often and some titles are only offered in the US.
+          a title page on Tubi, Kanopy or Hoopla. They play on those services, not here. Each link is checked weekly to make
+          sure the title page still opens, but a page that opens is not a promise the film is playable: services add and
+          remove titles often, Kanopy and Hoopla titles depend on what your library licenses, and some titles are US-only.
         </li>
         <li>
           <strong>Internet Archive library</strong>: more films from the Archive, each listed for a stated reason shown

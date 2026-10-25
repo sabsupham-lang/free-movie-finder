@@ -6,7 +6,8 @@
 //
 // Wikidata is community-maintained and does not track when a title leaves a
 // service, so every link is checked. A link counts as "verified" when the
-// service returns the title page, "gone" on 404/410 or a redirect away from
+// service returns its title page (the page opening is all this proves; it
+// does not prove the film is currently playable), "gone" on 404/410 or a redirect away from
 // the title, and "unchecked" when the service refuses automated checks.
 // Gone links are dropped; unchecked ones are kept and labeled as such.
 // With a TMDB token configured, film pages show live JustWatch data instead.
